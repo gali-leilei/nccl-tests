@@ -232,7 +232,7 @@ def cmd_all_tests(
     # Build commands for each operation
     commands = []
     for op in SUPPORTED_OPS:
-        cmd = f"NCCL_DEBUG=INFO torchrun --nnodes $WORLD_SIZE --nproc_per_node 8 --master-addr $MASTER_ADDR --master-port $MASTER_PORT --node-rank $NODE_RANK {script_path} --op {op} {args_str}".strip()
+        cmd = f"NCCL_DEBUG=INFO torchrun --nnodes $WORLD_SIZE --nproc_per_node 8 --master-addr $MASTER_ADDR --master-port $MASTER_PORT --node-rank $RANK {script_path} --op {op} {args_str}".strip()
         commands.append(cmd)
 
     # Dry run: just list the commands
