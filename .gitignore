@@ -2,3 +2,10 @@
 #
 # See LICENCE.txt for license information
 /build
+
+# sample output
+*.log
+
+# benchmark sqilte db
+benchmark.db*
+pytorch_benchmark.db*
