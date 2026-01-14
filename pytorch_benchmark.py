@@ -12,6 +12,7 @@ import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
+from string import Template
 from typing import TypedDict
 
 DB_PATH = Path(__file__).parent / "pytorch_benchmark.db"
@@ -21,14 +22,14 @@ def is_master_node() -> bool:
     """Check if this is the master node (node rank 0).
 
     In SPMD execution, only node rank 0 should write to the database.
-    Returns True if NODE_RANK is 0 or not set (single-node case).
+    Returns True if RANK is 0 or not set (single-node case).
     """
-    node_rank = os.environ.get("NODE_RANK", "0")
-    return node_rank == "0"
+    rank = os.environ.get("RANK", "0")
+    return rank == "0"
 
 
 # Supported operations matching pytorch_nccl_tests.py
-SUPPORTED_OPS = [
+SUPPORTED_OPS = (
     "all_reduce",
     "all_gather",
     "reduce_scatter",
@@ -38,8 +39,13 @@ SUPPORTED_OPS = [
     "send_recv",
     "scatter",
     "gather",
-]
+)
 
+CMD_TEMPLATE = Template(
+    "NCCL_DEBUG=INFO torchrun --nnodes $$WORLD_SIZE --nproc_per_node 8 "
+    "--master-addr $$MASTER_ADDR --master-port $$MASTER_PORT --node-rank $$RANK "
+    "$script_path --op $op $args_str"
+)
 
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
@@ -111,7 +117,7 @@ def cmd_single_test(conn: sqlite3.Connection, command: str) -> SingleTestResult:
         command: The command to run
 
     Returns:
-        SingleTestResult with run info. Only writes to DB on master node (NODE_RANK=0).
+        SingleTestResult with run info. Only writes to DB on master node (RANK=0).
     """
     run_id = str(uuid.uuid4())
     created_at = datetime.now().isoformat()
@@ -129,7 +135,7 @@ def cmd_single_test(conn: sqlite3.Connection, command: str) -> SingleTestResult:
     command_kind = extract_command_kind(command)
     analysis = analyze_log(log_output)
 
-    # Only store in database on master node (NODE_RANK=0)
+    # Only store in database on master node (RANK=0)
     if is_master_node():
         conn.execute(
             """INSERT INTO benchmark_runs
@@ -232,7 +238,7 @@ def cmd_all_tests(
     # Build commands for each operation
     commands = []
     for op in SUPPORTED_OPS:
-        cmd = f"NCCL_DEBUG=INFO torchrun --nnodes $WORLD_SIZE --nproc_per_node 8 --master-addr $MASTER_ADDR --master-port $MASTER_PORT --node-rank $RANK {script_path} --op {op} {args_str}".strip()
+        cmd = CMD_TEMPLATE.substitute(script_path=script_path, op=op, args_str=args_str).strip()
         commands.append(cmd)
 
     # Dry run: just list the commands
